@@ -2,48 +2,21 @@ from fabric.api import *
 from fabric.contrib.console import confirm
 
 
-@task
-def celery():
-    put('./celerybeat.default', '/etc/default/celerybeat', mode=0644, use_sudo=True)
-    put('./celeryd.default', '/etc/default/celeryd', mode=0644, use_sudo=True)
-    put('./celerybeat.initd', '/etc/init.d/celerybeat', mode=0755, use_sudo=True)
-    put('./celeryd.initd', '/etc/init.d/celeryd', mode=0755, use_sudo=True)
-    run('mkdir -p /var/run/celery')
-
 
 @task
-def build(flavor=None):
+def install(flavor=None):
     server_name = prompt('Server name: ', default='NEWSERVER')
-    if flavor == 'app':
-        postgres = True
-        nginx = True
-        memcached = True
-        redis = True
-        rabbitmq = True
-        supervisor = True
-    elif flavor == 'db':
-        postgres = True
-        nginx = False
-        memcached = False
-        redis = True
-        rabbitmq = False
-        supervisor = False
-    elif flavor == 'web':
+    if flavor == 'web':
         postgres = False
-        nginx = True
-        memcached = False
-        redis = False
-        rabbitmq = False
-        supervisor = False
-    elif flavor == 'cms':
-        postgres = True
+        mysql = False
         nginx = True
         memcached = True
         redis = True
-        rabbitmq = True
+        rabbitmq = False
         supervisor = True
     else:
         postgres = confirm("Install PostgreSQL?", default=False)
+        mysql = confirm("Install MySQL?", default=False)
         nginx = confirm("Install NGINX?", default=False)
         memcached = confirm("Install Memcached?", default=False)
         redis = confirm("Install Redis?", default=False)
@@ -76,43 +49,13 @@ def build(flavor=None):
     run('echo "%s %s" >> /etc/hosts' % (env.host_string.split('@')[-1], server_name))
 
     # Create fabrique user
-    import string
-    import random
-    import crypt
-
-    characters = string.letters + string.digits + '!@#$%^&*()-_=+~{[}],.<>?'
-    password_size = 30
-    # A possible 10,838,109,570,573,913,960,623,703,697,505,423,039,374,700,588,527,754,674,176
-    # variations with this algorithm
-    fabrique_password = ''.join((random.choice(characters) for x in range(password_size)))
-
-    salt_characters = string.letters + string.digits
-    salt = ''.join((random.choice(salt_characters) for x in range(3)))
-
-    fabrique_crypt = crypt.crypt(fabrique_password, salt)
-
-    run('useradd fabrique -Um -s /bin/bash -p %s' % fabrique_crypt)
+    run('useradd fabrique -Um -s /bin/bash' )
+    # Create ssh identity
     sudo('ssh-keygen -t rsa -f /home/fabrique/.ssh/id_rsa -C "fabrique@%s" -q -N ""' % server_name, user='fabrique', shell=False)
+    # Enable Fabrique devs to ssh
     run('wget "http://dev.fabriquehq.nl/install/authorized_keys" -O "/home/fabrique/.ssh/authorized_keys"')
-    #put('~/.ssh/id_rsa.pub', '/home/fabrique/.ssh/authorized_keys', mode=0644)
     run('chmod 644 /home/fabrique/.ssh/authorized_keys')
     run('chown fabrique: /home/fabrique/.ssh/authorized_keys')
-
-    # Create web user
-    #run('useradd --system --shell=/bin/bash --home=/var/www --create-home web')
-    #sudo('ssh-keygen -t rsa -f /var/www/.ssh/id_rsa -C "web@%s" -q -N ""' % server_name, user='web', shell=False)
-    #sudo('echo "alias activate=\'source env/bin/activate\'" > /var/www/.bash_aliases', user='web', shell=False)
-    #put('~/.ssh/id_rsa.pub', '/var/www/.ssh/authorized_keys', mode=0644)
-    #run('chown web: /var/www/.ssh/authorized_keys')
-    #run('chown web: /var/www/.bash_aliases')
-#
-    ## Create backups user
-    #run('rm -rf /var/backups')
-    #run('useradd --system --shell=/bin/bash --home=/var/backups --create-home backups')
-    #sudo('ssh-keygen -t rsa -f /var/backups/.ssh/id_rsa -C "backups@%s" -q -N ""' % server_name, user='backups', shell=False)
-    #put('~/.ssh/id_rsa.pub', '/var/backups/.ssh/authorized_keys', mode=0644)
-    #sudo('cat /var/www/.ssh/id_rsa.pub >> /var/backups/.ssh/authorized_keys')
-    #run('chown backups: /var/backups/.ssh/authorized_keys')
 
     # Dotfiles
     put('./dotfiles/', '/home/fabrique/')
@@ -125,32 +68,34 @@ def build(flavor=None):
     put('./celerybeat.initd', '/etc/init.d/celerybeat', mode=0755)
     put('./celeryd.initd', '/etc/init.d/celeryd', mode=0755)
     run('mkdir -p /var/run/celery')
-    run('chown web: /var/run/celery')
+    run('chown www-data: /var/run/celery')
 
-    # NodeJS
-    run('apt-get install python-software-properties python g++ make -qy')
-    run('add-apt-repository ppa:chris-lea/node.js -y')
-    run('apt-get update -q')
-    run('apt-get install nodejs -qy')
+    # Install essentials
+    run('apt-get install build-essential gcc g++ make bash-completion htop -qy')
 
-    # Python 3.x stuff
-    run('apt-get install build-essential gcc python3-dev python3-setuptools bash-completion htop ipython3 -qy')
-    run('easy_install3 pip')
+    # Python stuff
+    run('apt-get install python-software-properties python python-dev python-setuptools ipython python-imaging libjpeg-dev -qy')
+    run('easy_install pip')
     run('pip install ipdb virtualenv')
+
+    # Version control
     run('apt-get install git-core mercurial subversion -qy')
-    run('apt-get install python3-imaging libpq-dev -qy')
 
     # uWSGI
-    run('apt-get install libpcre3 libpcre3-dev -qy')
     run('pip install uwsgi')
     run('mkdir -p /etc/uwsgi/vassals')
     put('./uwsgi.conf', '/etc/init/uwsgi.conf', mode=0644)
     run('mkdir -p /var/log/uwsgi')
-    run('chown web: /var/log/uwsgi')
+
+    # Ruby
+    run('apt-get install ruby rubygems ruby-compass -qy')
 
     if postgres:
-        run('apt-get install postgresql-server-dev-9.3 postgresql-9.3 -qy')
-        sudo('createuser -s web', user='postgres', shell=False)
+        run('apt-get install libpq-dev postgresql-server-dev-9.3 postgresql-9.3 postgresql-client-9.3 python-psycopg2 -qy')
+        #sudo('createuser -s web', user='postgres', shell=False)
+
+    if mysql:
+        run('apt-get install mysql-server mysql-client python-mysqldb libmysqlclient-dev')
 
     if nginx:
         run('apt-get install nginx -qy')
@@ -169,4 +114,5 @@ def build(flavor=None):
     if supervisor:
         run('apt-get install supervisor -qy')
 
-    print "\n\nfabrique PASSWORD\n\n%s\n\n" % fabrique_password
+    print "Done with basic setup."
+
