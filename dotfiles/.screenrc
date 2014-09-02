@@ -1,0 +1,11 @@
+vbell off                   # no annoying audible bell
+startup_message off         # don't display the copyright page on startup
+autodetach on               # detach on hangup
+defscrollback 10000         # scrolling can be very helpfull
+
+hardstatus on
+hardstatus alwayslastline
+#hardstatus string '%{= kG}[ %{G}%H ][%= %{= kw}%?%-Lw%?%{r}(%{W}%n*%f %t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][ %{C}%d/%m %{R}%c%{G} ]'
+#hardstatus string '%{.B}[%= %{= .B}%?%-Lw%?%{r}(%{W}%n*%f %t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][ %{R}%c%{G} ]'
+hardstatus string "%{.B}%-w%{.wk}%n %t%{-}%+w %= %{..k} %H %{..k} %l %D %d/%m/%Y %0c"
+hardstatus 

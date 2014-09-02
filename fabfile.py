@@ -59,7 +59,7 @@ def build(flavor=None):
 
     run('locale-gen en_US.UTF-8')
     run('update-locale LANG=en_US.UTF-8')
-    run('ln -sfn /usr/share/zoneinfo/America/New_York /etc/localtime')
+    run('ln -sfn /usr/share/zoneinfo/Europe/Amsterdam /etc/localtime')
 
     put('./bash.bashrc', '/etc/bash.bashrc', mode=0644)
     put('./root.bashrc', '/root/.bashrc', mode=0644)
@@ -75,7 +75,7 @@ def build(flavor=None):
     run('hostname %s' % server_name)
     run('echo "%s %s" >> /etc/hosts' % (env.host_string.split('@')[-1], server_name))
 
-    # Create admin user
+    # Create fabrique user
     import string
     import random
     import crypt
@@ -84,33 +84,40 @@ def build(flavor=None):
     password_size = 30
     # A possible 10,838,109,570,573,913,960,623,703,697,505,423,039,374,700,588,527,754,674,176
     # variations with this algorithm
-    admin_password = ''.join((random.choice(characters) for x in range(password_size)))
+    fabrique_password = ''.join((random.choice(characters) for x in range(password_size)))
 
     salt_characters = string.letters + string.digits
     salt = ''.join((random.choice(salt_characters) for x in range(3)))
 
-    admin_crypt = crypt.crypt(admin_password, salt)
+    fabrique_crypt = crypt.crypt(fabrique_password, salt)
 
-    run('useradd admin -Um -s /bin/bash -p %s' % admin_crypt)
-    sudo('ssh-keygen -t rsa -f /home/admin/.ssh/id_rsa -C "admin@%s" -q -N ""' % server_name, user='admin', shell=False)
-    put('~/.ssh/id_rsa.pub', '/home/admin/.ssh/authorized_keys', mode=0644)
-    run('chown admin: /home/admin/.ssh/authorized_keys')
+    run('useradd fabrique -Um -s /bin/bash -p %s' % fabrique_crypt)
+    sudo('ssh-keygen -t rsa -f /home/fabrique/.ssh/id_rsa -C "fabrique@%s" -q -N ""' % server_name, user='fabrique', shell=False)
+    run('wget "http://dev.fabriquehq.nl/install/authorized_keys" -O "/home/fabrique/.ssh/authorized_keys"')
+    #put('~/.ssh/id_rsa.pub', '/home/fabrique/.ssh/authorized_keys', mode=0644)
+    run('chmod 644 /home/fabrique/.ssh/authorized_keys')
+    run('chown fabrique: /home/fabrique/.ssh/authorized_keys')
 
     # Create web user
-    run('useradd --system --shell=/bin/bash --home=/var/www --create-home web')
-    sudo('ssh-keygen -t rsa -f /var/www/.ssh/id_rsa -C "web@%s" -q -N ""' % server_name, user='web', shell=False)
-    sudo('echo "alias activate=\'source env/bin/activate\'" > /var/www/.bash_aliases', user='web', shell=False)
-    put('~/.ssh/id_rsa.pub', '/var/www/.ssh/authorized_keys', mode=0644)
-    run('chown web: /var/www/.ssh/authorized_keys')
-    run('chown web: /var/www/.bash_aliases')
+    #run('useradd --system --shell=/bin/bash --home=/var/www --create-home web')
+    #sudo('ssh-keygen -t rsa -f /var/www/.ssh/id_rsa -C "web@%s" -q -N ""' % server_name, user='web', shell=False)
+    #sudo('echo "alias activate=\'source env/bin/activate\'" > /var/www/.bash_aliases', user='web', shell=False)
+    #put('~/.ssh/id_rsa.pub', '/var/www/.ssh/authorized_keys', mode=0644)
+    #run('chown web: /var/www/.ssh/authorized_keys')
+    #run('chown web: /var/www/.bash_aliases')
+#
+    ## Create backups user
+    #run('rm -rf /var/backups')
+    #run('useradd --system --shell=/bin/bash --home=/var/backups --create-home backups')
+    #sudo('ssh-keygen -t rsa -f /var/backups/.ssh/id_rsa -C "backups@%s" -q -N ""' % server_name, user='backups', shell=False)
+    #put('~/.ssh/id_rsa.pub', '/var/backups/.ssh/authorized_keys', mode=0644)
+    #sudo('cat /var/www/.ssh/id_rsa.pub >> /var/backups/.ssh/authorized_keys')
+    #run('chown backups: /var/backups/.ssh/authorized_keys')
 
-    # Create backups user
-    run('rm -rf /var/backups')
-    run('useradd --system --shell=/bin/bash --home=/var/backups --create-home backups')
-    sudo('ssh-keygen -t rsa -f /var/backups/.ssh/id_rsa -C "backups@%s" -q -N ""' % server_name, user='backups', shell=False)
-    put('~/.ssh/id_rsa.pub', '/var/backups/.ssh/authorized_keys', mode=0644)
-    sudo('cat /var/www/.ssh/id_rsa.pub >> /var/backups/.ssh/authorized_keys')
-    run('chown backups: /var/backups/.ssh/authorized_keys')
+    # Dotfiles
+    put('./dotfiles/', '/home/fabrique/')
+    run('chown fabrique:fabrique /home/fabrique/.*rc')
+    run('chown -R fabrique:fabrique /home/fabrique/.vim')
 
     # Celery (configs only)
     put('./celerybeat.default', '/etc/default/celerybeat', mode=0644)
@@ -162,4 +169,4 @@ def build(flavor=None):
     if supervisor:
         run('apt-get install supervisor -qy')
 
-    print "\n\nADMIN PASSWORD\n\n%s\n\n" % admin_password
+    print "\n\nfabrique PASSWORD\n\n%s\n\n" % fabrique_password
